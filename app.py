@@ -3,7 +3,7 @@ import pandas as pd
 import os
 import io
 
-# 1. ESTILOS CORPORATIVOS DEL BANCO
+# 1. ESTILOS CORPORATIVOS
 st.set_page_config(page_title="Portal de Talento", layout="wide")
 st.markdown("""
     <style>
@@ -20,12 +20,11 @@ st.markdown("Gestión automatizada de Matriz de Control y SLAs.")
 st.divider()
 
 ARCHIVO_BASE = "inventario_maestro.xlsx"
-col_izq, col_der = st.columns([1, 1.5]) 
+col_izq, col_der = st.columns([1, 1.8]) 
 
 with col_izq:
     st.subheader("⚙️ Ingesta de Datos")
     
-    # 2. LÓGICA DE ALMACENAMIENTO PERMANENTE
     if not os.path.exists(ARCHIVO_BASE):
         st.info("👋 Configuración Inicial: Sube tu Inventario Base por única vez.")
         inv_file = st.file_uploader("📥 1. Sube tu Inventario de Control", type=['xlsx'])
@@ -43,7 +42,6 @@ with col_izq:
             df_rpt = pd.read_excel(rpt_file, sheet_name=0)
             df_rpt.columns = df_rpt.columns.str.strip()
             
-            # Cruce de datos
             df_inv['JR_clean'] = df_inv['JR'].astype(str).str.strip().str.upper()
             df_rpt['JR_clean'] = df_rpt['JR'].astype(str).str.strip().str.upper()
             df_inv = df_inv.dropna(subset=['JR'])
@@ -83,12 +81,9 @@ with col_izq:
                 df_inv = pd.concat([df_inv, pd.DataFrame(nuevas_filas)], ignore_index=True)
                 
             df_inv = df_inv.drop(columns=['JR_clean'])
-            
-            # Sobreescribir la base de datos interna para guardar los cambios
             df_inv.to_excel(ARCHIVO_BASE, index=False)
             st.success(f"✅ Cruce exitoso. {len(nuevas_filas)} vacantes nuevas agregadas.")
             
-            # Semáforos
             if 'Dias que lleva abierta la JR' in df_rpt.columns:
                 df_rpt['Dias'] = pd.to_numeric(df_rpt['Dias que lleva abierta la JR'], errors='coerce')
                 st.markdown("### 🚦 Alertas de SLAs")
@@ -99,16 +94,28 @@ with col_izq:
 
 with col_der:
     if os.path.exists(ARCHIVO_BASE):
-        st.subheader("📋 Base Central de Vacantes")
+        st.subheader("📋 Matriz de Control Editable")
+        st.info("💡 Haz doble clic en cualquier celda para editar (como en Excel). Los cambios se guardan solos.")
+        
         df_mostrar = pd.read_excel(ARCHIVO_BASE)
-        st.dataframe(df_mostrar, use_container_width=True, height=400)
+        
+        # LA MAGIA: Convertimos el dataframe estático en un editor dinámico
+        df_editado = st.data_editor(
+            df_mostrar, 
+            use_container_width=True, 
+            height=500,
+            num_rows="dynamic" # Permite agregar filas nuevas manualmente
+        )
+        
+        # Guarda automáticamente cualquier edición que haga el equipo
+        df_editado.to_excel(ARCHIVO_BASE, index=False)
         
         buffer = io.BytesIO()
         with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
-            df_mostrar.to_excel(writer, index=False, sheet_name='Inventario_Actualizado')
+            df_editado.to_excel(writer, index=False, sheet_name='Inventario_Actualizado')
         
         st.download_button(
-            label="⬇️ Descargar Backup Manual (Opcional)",
+            label="⬇️ Descargar Copia Manual (Excel)",
             data=buffer.getvalue(),
             file_name="Inventario_Actualizado.xlsx",
             mime="application/vnd.ms-excel"
